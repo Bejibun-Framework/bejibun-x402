@@ -9,7 +9,10 @@ export default class X402 {
     static setPaywall(config) {
         return new X402Builder().setPaywall(config);
     }
-    static setRequest(config) {
-        return new X402Builder().setRequest(config);
+    static setRoute(config) {
+        return new X402Builder().setRoute(config);
+    }
+    static setRequest(request) {
+        return new X402Builder().setRequest(request);
     }
 }

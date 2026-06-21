@@ -10,7 +10,7 @@
     "module": "index.js",
     "devDependencies": {
         "@types/bun": "latest",
-        "tsc-alias": "^1.8.16"
+        "tsc-alias": "^1.8.17"
     },
     "bugs": {
         "url": "https://github.com/Bejibun-Framework/bejibun-x402/issues"
@@ -35,9 +35,11 @@
     "type": "module",
     "types": "index.d.ts",
     "dependencies": {
-        "@bejibun/app": "^0.1.22",
+        "@bejibun/app": "^0.1.24",
         "@bejibun/logger": "^0.1.22",
         "@bejibun/utils": "^0.1.28",
-        "x402": "^0.7.3"
+        "@x402/core": "^2.16.0",
+        "@x402/evm": "^2.16.0",
+        "viem": "^2.53.1"
     }
 }

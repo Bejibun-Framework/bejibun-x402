@@ -1,315 +1,274 @@
 import App from "@bejibun/app";
-import {defineValue, isEmpty, isNotEmpty} from "@bejibun/utils";
+import {defineValue, isEmpty} from "@bejibun/utils";
 import fs from "fs";
 import {getAddress} from "viem";
-import {getPaywallHtml} from "x402/paywall";
-import {exact} from "x402/schemes";
-import {
-    findMatchingPaymentRequirements,
-    processPriceToAtomicAmount,
-    toJsonSafe
-} from "x402/shared";
-import {
-    ERC20TokenAmount,
-    FacilitatorConfig,
-    moneySchema,
-    PaymentPayload,
-    PaymentRequirements,
-    PaywallConfig,
-    SPLTokenAmount,
-    settleResponseHeader,
-    SupportedEVMNetworks,
-    SupportedSVMNetworks
-} from "x402/types";
-import {useFacilitator} from "x402/verify";
+import {x402ResourceServer, HTTPFacilitatorClient} from "@x402/core/server";
+import {x402HTTPResourceServer} from "@x402/core/http";
+import type {HTTPAdapter, HTTPRequestContext, RoutesConfig} from "@x402/core/http";
+import {ExactEvmScheme} from "@x402/evm/exact/server";
+import {UptoEvmScheme} from "@x402/evm/upto/server";
+import {BatchSettlementEvmScheme} from "@x402/evm/batch-settlement/server";
 import X402Config from "@/config/x402";
 import X402Exception from "@/exceptions/X402Exception";
 
+export type TScheme = "exact" | "upto" | "batch-settlement";
+
 export type TX402Config = {
-    customPaywallHtml?: string;
     description?: string;
-    discoverable?: boolean;
     mimeType?: string;
-    inputSchema?: Record<string, any>;
-    outputSchema?: Record<string, any>;
 };
 
 export type TFacilitator = {
-    verify: (payload: any, paymentRequirements: any) => Promise<any>;
-    settle: (payload: any, paymentRequirements: any) => Promise<any>;
-    supported: () => Promise<any>;
-    list: (config?: any) => Promise<any>;
+    url?: string;
 };
 
-export type TToken = {
-    maxAmountRequired: string;
-    asset?: ERC20TokenAmount["asset"] | SPLTokenAmount["asset"];
+export type TPaywall = Record<string, never>;
+
+export type TRoutePaymentConfig = {
+    scheme: TScheme;
+    price: string;
+    network?: string;
+    payTo?: string;
+    description?: string;
+    mimeType?: string;
 };
+
+/**
+ * BunAdapter — implements @x402/core HTTPAdapter directly against Bun.BunRequest.
+ */
+class BunAdapter implements HTTPAdapter {
+    private readonly _url: URL;
+
+    constructor(private readonly req: Bun.BunRequest) {
+        this._url = new URL(req.url);
+    }
+
+    getHeader(name: string): string | undefined {
+        return this.req.headers.get(name) ?? undefined;
+    }
+
+    getMethod(): string {
+        return this.req.method.toUpperCase();
+    }
+
+    getPath(): string {
+        return this._url.pathname;
+    }
+
+    getUrl(): string {
+        return this.req.url;
+    }
+
+    getAcceptHeader(): string {
+        return this.req.headers.get("accept") ?? "";
+    }
+
+    getUserAgent(): string {
+        return this.req.headers.get("user-agent") ?? "";
+    }
+
+    getQueryParam(name: string): string | undefined {
+        return this._url.searchParams.get(name) ?? undefined;
+    }
+
+    getQueryParams(): Record<string, string> {
+        const params: Record<string, string> = {};
+        this._url.searchParams.forEach((value, key) => {
+            params[key] = value;
+        });
+        return params;
+    }
+}
 
 export default class X402Builder {
     protected conf: Record<string, any>;
-    protected facilitatorConfig?: FacilitatorConfig;
     protected payloadConfig?: TX402Config = {};
-    protected paymentRequirements: Array<PaymentRequirements> = [];
-    protected paywallConfig?: PaywallConfig = {};
-    protected request?: Bun.BunRequest;
-    protected decoded?: PaymentPayload;
-    protected token?: TToken;
+    protected facilitatorConfig?: TFacilitator;
+    protected bunRequest?: Bun.BunRequest;
+    protected routeConfig?: TRoutePaymentConfig;
 
     public constructor() {
         const configPath = App.Path.configPath("x402.ts");
-
         let config: any;
-
         if (fs.existsSync(configPath)) config = require(configPath).default;
         else config = X402Config;
-
         this.conf = config;
     }
 
     private get config(): Record<string, any> {
         if (isEmpty(this.conf)) throw new X402Exception("There is no config provided.");
-
         return this.conf;
     }
 
-    private get facilitator(): TFacilitator {
-        return useFacilitator(this.facilitatorConfig);
+    private get _network(): string {
+        return defineValue(this.conf?.network, "eip155:84532");
     }
 
-    private initToken(): TToken | undefined {
-        const atomicAmountForAsset = processPriceToAtomicAmount(this.config.price, this.config.network);
-        if ("error" in atomicAmountForAsset) throw new X402Exception(atomicAmountForAsset.error);
-
-        this.token = atomicAmountForAsset;
-
-        return this.token;
+    private get _payTo(): string {
+        const addr = defineValue(
+            this.routeConfig?.payTo,
+            defineValue(
+                this.conf?.address,
+                "0x0000000000000000000000000000000000000000"
+            )
+        );
+        return getAddress(addr);
     }
 
-    private async requirements(): Promise<Array<PaymentRequirements>> {
-        if (SupportedEVMNetworks.includes(this.config.network)) {
-            this.paymentRequirements.push({
-                scheme: "exact",
-                network: this.config.network,
-                maxAmountRequired: (this.token as TToken).maxAmountRequired,
-                resource: defineValue(this.request?.url, ""),
-                description: defineValue(this.payloadConfig?.description, ""),
-                mimeType: defineValue(this.payloadConfig?.mimeType, ""),
-                payTo: getAddress(this.config.address),
-                maxTimeoutSeconds: defineValue(this.config.timeout, 60),
-                asset: getAddress(defineValue(this.token?.asset?.address)),
-                outputSchema: {
-                    input: {
-                        type: "http",
-                        method: defineValue(this.request?.method, ""),
-                        discoverable: defineValue(this.payloadConfig?.discoverable, true),
-                        ...defineValue(this.payloadConfig?.inputSchema, {})
-                    },
-                    output: defineValue(this.payloadConfig?.outputSchema, {})
+    private get _price(): string {
+        return defineValue(this.routeConfig?.price, defineValue(this.conf?.price, "$0.01"));
+    }
+
+    private get _scheme(): TScheme {
+        return defineValue(this.routeConfig?.scheme, defineValue(this.conf?.scheme, "exact")) as TScheme;
+    }
+
+    private get _mimeType(): string {
+        return defineValue(this.routeConfig?.mimeType, defineValue(this.payloadConfig?.mimeType, "application/json"));
+    }
+
+    private _buildHttpServer(adapter: BunAdapter): x402HTTPResourceServer {
+        const facilitatorUrl = defineValue(
+            this.facilitatorConfig?.url,
+            defineValue(
+                this.conf?.facilitatorUrl,
+                "https://x402.org/facilitator"
+            )
+        );
+
+        const facilitatorClient = new HTTPFacilitatorClient({url: facilitatorUrl});
+
+        const resourceServer = new x402ResourceServer(facilitatorClient)
+            .register(this._network as any, new ExactEvmScheme())
+            .register(this._network as any, new UptoEvmScheme())
+            .register(this._network as any, new BatchSettlementEvmScheme(this._payTo as any));
+
+        const routeKey = `${adapter.getMethod()} ${adapter.getPath()}`;
+
+        const routes: RoutesConfig = {
+            [routeKey]: {
+                accepts: {
+                    scheme: this._scheme,
+                    price: this._price,
+                    network: defineValue(this.routeConfig?.network, this._network),
+                    payTo: this._payTo,
                 },
-                extra: (this.token?.asset as ERC20TokenAmount["asset"]).eip712
-            });
-        } else if (SupportedSVMNetworks.includes(this.config.network)) {
-            const paymentKinds = await this.facilitator.supported();
+                description: defineValue(
+                    this.routeConfig?.description,
+                    defineValue(
+                        this.payloadConfig?.description,
+                        ""
+                    )
+                ),
+                mimeType: this._mimeType
+            },
+        };
 
-            let feePayer: string | undefined;
-            for (const kind of paymentKinds.kinds) {
-                if (kind.network === this.config.network && kind.scheme === "exact") {
-                    feePayer = defineValue(kind?.extra?.feePayer);
-                    break;
-                }
-            }
-
-            if (isEmpty(feePayer)) throw new X402Exception(`The facilitator did not provide a fee payer for network: ${this.config.network}.`);
-
-            this.paymentRequirements.push({
-                scheme: "exact",
-                network: this.config.network,
-                maxAmountRequired: (this.token as TToken).maxAmountRequired,
-                resource: defineValue(this.request?.url, ""),
-                description: defineValue(this.payloadConfig?.description, ""),
-                mimeType: defineValue(this.payloadConfig?.mimeType, ""),
-                payTo: this.config.address,
-                maxTimeoutSeconds: defineValue(this.config.timeout, 60),
-                asset: defineValue(this.token?.asset?.address),
-                outputSchema: {
-                    input: {
-                        type: "http",
-                        method: defineValue(this.request?.method, ""),
-                        discoverable: defineValue(this.payloadConfig?.discoverable, true),
-                        ...defineValue(this.payloadConfig?.inputSchema, {})
-                    },
-                    output: defineValue(this.payloadConfig?.outputSchema, {})
-                },
-                extra: {
-                    feePayer: feePayer
-                }
-            });
-        } else {
-            throw new X402Exception(`Unsupported network: ${this.config.network}`);
-        }
-
-        return this.paymentRequirements;
+        return new x402HTTPResourceServer(resourceServer, routes);
     }
 
-    private get payment(): string {
-        const payment = defineValue(this.request?.headers?.get("X-PAYMENT"));
-        const userAgent = defineValue(this.request?.headers?.get("User-Agent"), "");
-        const acceptHeader = defineValue(this.request?.headers?.get("Accept"), "");
-        const isWebBrowser = acceptHeader.includes("text/html") && userAgent.includes("Mozilla");
-
-        if (isEmpty(payment)) {
-            if (isWebBrowser && !this.config.forceJson) {
-                let displayAmount: number;
-                if (typeof this.config.price === "string" || typeof this.config.price === "number") {
-                    const parsed = moneySchema.safeParse(this.config.price);
-                    if (parsed.success) displayAmount = parsed.data;
-                    else displayAmount = Number.NaN;
-                } else {
-                    displayAmount = Number(this.config.price.amount) / 10 ** this.config.price.asset.decimals;
-                }
-
-                const html = defineValue(this.payloadConfig?.customPaywallHtml, getPaywallHtml({
-                    amount: displayAmount,
-                    paymentRequirements: toJsonSafe(this.paymentRequirements) as Parameters<typeof getPaywallHtml>[0]["paymentRequirements"],
-                    currentUrl: defineValue(this.request?.url, ""),
-                    testnet: defineValue(this.config.testnet, true),
-                    cdpClientKey: defineValue(this.paywallConfig?.cdpClientKey),
-                    appName: defineValue(this.paywallConfig?.appName),
-                    appLogo: defineValue(this.paywallConfig?.appLogo),
-                    sessionTokenEndpoint: defineValue(this.paywallConfig?.sessionTokenEndpoint)
-                }));
-
-                throw new X402Exception("The X-PAYMENT header is required.", {
-                    x402Version: this.config.version,
-                    accepts: toJsonSafe(this.paymentRequirements),
-                    html: html
-                });
-            }
-
-            throw new X402Exception("The X-PAYMENT header is required.", {
-                x402Version: this.config.version,
-                accepts: toJsonSafe(this.paymentRequirements)
-            });
-        }
-
-        return payment;
-    }
-
-    private decode(): PaymentPayload {
-        const payment: string = this.payment;
-
-        try {
-            this.decoded = exact.evm.decodePayment(payment);
-            this.decoded.x402Version = this.config.version;
-        } catch (error: any) {
-            throw new X402Exception(defineValue(error?.message, "Invalid or mailformed payment header."), {
-                x402Version: this.config.version,
-                accepts: toJsonSafe(this.paymentRequirements)
-            });
-        }
-
-        return this.decoded;
-    }
-
-    private get selectedPayment(): any {
-        const selectedPaymentRequirements = findMatchingPaymentRequirements(this.paymentRequirements, this.decoded as PaymentPayload);
-        if (isEmpty(selectedPaymentRequirements)) {
-            throw new X402Exception("Unable to find matching payment requirements.", {
-                x402Version: this.config.version,
-                accepts: toJsonSafe(this.paymentRequirements)
-            });
-        }
-
-        return selectedPaymentRequirements;
-    }
-
-    private async verify(): Promise<void> {
-        this.initToken();
-
-        await this.requirements();
-
-        this.decode();
-
-        let response: any;
-        try {
-            response = await this.facilitator.verify(this.decoded, this.selectedPayment);
-        } catch (error: any) {
-            throw new X402Exception(defineValue(error?.message, "Failed to verify payment."), {
-                x402Version: this.config.version,
-                accepts: toJsonSafe(this.paymentRequirements)
-            });
-        }
-
-        if (!response.isValid) {
-            throw new X402Exception(response.invalidReason, {
-                x402Version: this.config.version,
-                accepts: toJsonSafe(this.paymentRequirements),
-                payer: response.payer
-            });
-        }
-    }
-
-    private async settle(): Promise<void> {
-        await this.verify();
-
-        let settleResponse: any;
-        try {
-            settleResponse = await this.facilitator.settle(this.decoded, this.selectedPayment);
-            const responseHeader = settleResponseHeader(settleResponse);
-            this.request?.headers?.set("X-PAYMENT-RESPONSE", responseHeader);
-        } catch (error: any) {
-            throw new X402Exception(defineValue(error?.message, "Failed to settle payment."), {
-                x402Version: this.config.version,
-                accepts: toJsonSafe(this.paymentRequirements)
-            });
-        }
-
-        if (!settleResponse.success) {
-            throw new X402Exception(settleResponse.errorReason, {
-                x402Version: this.config.version,
-                accepts: toJsonSafe(this.paymentRequirements)
-            });
-        }
-    }
+    // ── Public builder API ──────────────────────────────────────────────────
 
     public setConfig(config?: TX402Config): X402Builder {
         this.payloadConfig = config;
-
         return this;
     }
 
-    public setFacilitator(config?: FacilitatorConfig): X402Builder {
+    public setFacilitator(config?: TFacilitator): X402Builder {
         this.facilitatorConfig = config;
-
         return this;
     }
 
-    public setPaywall(config?: PaywallConfig): X402Builder {
-        this.paywallConfig = config;
+    /** No-op — kept for bejibun-core X402Middleware compatibility. */
+    public setPaywall(_config?: TPaywall): X402Builder {
+        return this;
+    }
 
+    public setRoute(config: TRoutePaymentConfig): X402Builder {
+        this.routeConfig = config;
         return this;
     }
 
     public setRequest(request: Bun.BunRequest): X402Builder {
-        this.request = request;
-
+        this.bunRequest = request;
         return this;
     }
 
-    public async middleware(handler: Function): Promise<any> {
-        try {
-            await this.settle();
-
-            return handler();
-        } catch (error: any) {
-            if (isNotEmpty(error?.data?.html)) return new Response((error as X402Exception).data.html, {
-                headers: {
-                    "Content-Type": "text/html"
-                }
-            });
-
-            throw error;
+    /**
+     * Run x402 payment verification and settlement via @x402/core directly.
+     *
+     * Flow:
+     *  - No payment header  → 402 + PAYMENT-REQUIRED header
+     *  - Invalid payment    → 402 + PAYMENT-REQUIRED header (with error)
+     *  - Valid payment      → verifies, calls handler(), settles, attaches PAYMENT-RESPONSE header
+     */
+    public async middleware(handler: () => Promise<Response> | Response): Promise<Response> {
+        if (!this.bunRequest) {
+            throw new X402Exception("setRequest() must be called before middleware().");
         }
+
+        const adapter = new BunAdapter(this.bunRequest);
+        const httpServer = this._buildHttpServer(adapter);
+
+        await httpServer.initialize();
+
+        // Build the HTTPRequestContext that processHTTPRequest expects
+        const context: HTTPRequestContext = {
+            adapter,
+            method: adapter.getMethod(),
+            path: adapter.getPath(),
+            paymentHeader: adapter.getHeader("x-payment") ?? adapter.getHeader("PAYMENT-SIGNATURE"),
+        };
+
+        const result = await httpServer.processHTTPRequest(context);
+
+        if (result.type === "payment-error") {
+            // Framework should return the 402 response as instructed
+            const {status, headers, body} = result.response;
+            return new Response(
+                body !== undefined ? JSON.stringify(body) : null,
+                {
+                    status,
+                    headers: {
+                        ...headers,
+                        "Content-Type": this._mimeType,
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Expose-Headers": "*"
+                    }
+                }
+            );
+        }
+
+        if (result.type === "no-payment-required") {
+            // Route not protected (shouldn't happen, but handle gracefully)
+            return handler();
+        }
+
+        // type === "payment-verified" — run handler first, then settle
+        const handlerResponse = await handler();
+
+        // Only settle on successful handler responses (status < 400)
+        if (handlerResponse.status < 400) {
+            const settlement = await httpServer.processSettlement(
+                result.paymentPayload,
+                result.paymentRequirements
+            );
+
+            if (settlement.success) {
+                const headers = new Headers(handlerResponse.headers);
+                Object.entries(settlement.headers).forEach(([k, v]) => headers.set(k, v));
+                return new Response(handlerResponse.body, {
+                    status: handlerResponse.status,
+                    headers: {
+                        ...headers,
+                        "Content-Type": this._mimeType,
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Expose-Headers": "*"
+                    }
+                });
+            }
+        }
+
+        return handlerResponse;
     }
 }
