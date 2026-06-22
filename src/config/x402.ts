@@ -1,13 +1,14 @@
+import type {TScheme} from "@/types/x402";
+
 const config: Record<string, any> = {
     version: 2,
-    network: "eip155:84532",
-    address: "0x0000000000000000000000000000000000000000",
+    scheme: "exact" as TScheme,
     price: "$0.01",
-    scheme: "exact",
-    timeout: 60,
-    forceJson: false,
-    testnet: true,
-    facilitatorUrl: "https://x402.org/facilitator"
+    network: "eip155:8453",
+    payTo: "0xdABe8750061410D35cE52EB2a418c8cB004788B3",
+    facilitator: {
+        url: "https://api.cdp.coinbase.com/platform/v2/x402"
+    }
 };
 
 export default config;
