@@ -6,13 +6,22 @@ export default class X402Builder {
     protected routePaymentConfig?: TRoutePaymentConfig;
     constructor();
     private get config();
-    private get network();
-    private get payTo();
-    private get price();
     private get scheme();
+    private get price();
     private get description();
     private get mimeType();
     private get facilitator();
+    /**
+     * Resolve the accepts array for a route.
+     *
+     * Priority order:
+     *   1. routePaymentConfig.accepts  — explicit multi-network list
+     *   2. routePaymentConfig single-network fields (network + payTo)
+     *   3. config.networks             — both EVM + SVM from config file
+     *   4. config single-network fields (legacy)
+     *   5. built-in defaults (EVM Base + Solana mainnet)
+     */
+    private get accepts();
     private buildHttpServer;
     setFacilitator(config?: TFacilitator): X402Builder;
     setRoutePayment(config?: TRoutePaymentConfig): X402Builder;

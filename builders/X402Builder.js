@@ -29,17 +29,11 @@ export default class X402Builder {
             throw new X402Exception("There is no config provided.");
         return this.conf;
     }
-    get network() {
-        return defineValue(this.routePaymentConfig?.network, defineValue(this.config.network, "eip155:1"));
-    }
-    get payTo() {
-        return defineValue(this.routePaymentConfig?.payTo, defineValue(this.config.payTo, "0xdABe8750061410D35cE52EB2a418c8cB004788B3"));
+    get scheme() {
+        return defineValue(this.routePaymentConfig?.scheme, defineValue(this.config.scheme, "exact"));
     }
     get price() {
         return defineValue(this.routePaymentConfig?.price, defineValue(this.config.price, "$0.01"));
-    }
-    get scheme() {
-        return defineValue(this.routePaymentConfig?.scheme, defineValue(this.config.scheme, "exact"));
     }
     get description() {
         return defineValue(this.routePaymentConfig?.description, "");
@@ -52,28 +46,127 @@ export default class X402Builder {
             url: "https://api.cdp.coinbase.com/platform/v2/x402"
         }));
     }
+    /**
+     * Resolve the accepts array for a route.
+     *
+     * Priority order:
+     *   1. routePaymentConfig.accepts  — explicit multi-network list
+     *   2. routePaymentConfig single-network fields (network + payTo)
+     *   3. config.networks             — both EVM + SVM from config file
+     *   4. config single-network fields (legacy)
+     *   5. built-in defaults (EVM Base + Solana mainnet)
+     */
+    get accepts() {
+        // 1. Explicit accepts array on the route config
+        if (!isEmpty(this.routePaymentConfig?.accepts)) {
+            return this.routePaymentConfig.accepts.map(entry => ({
+                scheme: defineValue(entry.scheme, this.scheme),
+                price: defineValue(entry.price, this.price),
+                network: entry.network,
+                payTo: entry.payTo,
+                description: defineValue(entry.description, this.description),
+                mimeType: defineValue(entry.mimeType, this.mimeType)
+            }));
+        }
+        // 2. Single-network shorthand on the route config
+        if (!isEmpty(this.routePaymentConfig?.network) && !isEmpty(this.routePaymentConfig?.payTo)) {
+            return [{
+                    scheme: this.scheme,
+                    price: this.price,
+                    network: this.routePaymentConfig.network,
+                    payTo: this.routePaymentConfig.payTo,
+                    description: this.description,
+                    mimeType: this.mimeType
+                }];
+        }
+        // 3. Multi-network block in config file
+        if (!isEmpty(this.config.networks)) {
+            const networks = this.config.networks;
+            const result = [];
+            if (!isEmpty(networks.evm?.network) && !isEmpty(networks.evm?.payTo)) {
+                result.push({
+                    scheme: this.scheme,
+                    price: this.price,
+                    network: networks.evm.network,
+                    payTo: networks.evm.payTo,
+                    description: this.description,
+                    mimeType: this.mimeType
+                });
+            }
+            if (!isEmpty(networks.svm?.network) && !isEmpty(networks.svm?.payTo)) {
+                result.push({
+                    scheme: defineValue(networks.svm.scheme, "exact"),
+                    price: this.price,
+                    network: networks.svm.network,
+                    payTo: networks.svm.payTo,
+                    description: this.description,
+                    mimeType: this.mimeType
+                });
+            }
+            if (!isEmpty(result))
+                return result;
+        }
+        // 4. Legacy single-network fields in config file
+        if (!isEmpty(this.config.network) && !isEmpty(this.config.payTo)) {
+            return [{
+                    scheme: this.scheme,
+                    price: this.price,
+                    network: this.config.network,
+                    payTo: this.config.payTo,
+                    description: this.description,
+                    mimeType: this.mimeType
+                }];
+        }
+        // 5. Built-in defaults: Base mainnet + Solana mainnet
+        return [
+            {
+                scheme: this.scheme,
+                price: this.price,
+                network: "eip155:8453",
+                payTo: "0xdABe8750061410D35cE52EB2a418c8cB004788B3",
+                description: this.description,
+                mimeType: this.mimeType
+            },
+            {
+                scheme: "exact",
+                price: this.price,
+                network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+                payTo: "2PxBfRNZgjFUpYiJsDZsDYnDiJcGkz6Zes2xAjuzGywZ",
+                description: this.description,
+                mimeType: this.mimeType
+            }
+        ];
+    }
     buildHttpServer(adapter) {
         const facilitatorClient = new HTTPFacilitatorClient(this.facilitator);
         const resourceServer = new x402ResourceServer(facilitatorClient);
-        if (this.network.includes("eip155")) {
-            resourceServer
-                .register(this.network, new ExactEvmScheme())
-                .register(this.network, new UptoEvmScheme())
-                .register(this.network, new BatchSettlementEvmScheme(this.payTo));
-        }
-        if (this.network.includes("solana")) {
-            resourceServer
-                .register(this.network, new ExactSvmScheme());
+        // Register schemes for every network in the accepts list
+        const registeredNetworks = new Set();
+        for (const entry of this.accepts) {
+            if (registeredNetworks.has(entry.network))
+                continue;
+            registeredNetworks.add(entry.network);
+            if (entry.network.includes("eip155")) {
+                const evmPayTo = entry.payTo;
+                resourceServer
+                    .register(entry.network, new ExactEvmScheme())
+                    .register(entry.network, new UptoEvmScheme())
+                    .register(entry.network, new BatchSettlementEvmScheme(evmPayTo));
+            }
+            if (entry.network.includes("solana")) {
+                resourceServer
+                    .register(entry.network, new ExactSvmScheme());
+            }
         }
         const routeKey = `${adapter.getMethod()} ${adapter.getPath()}`;
         const routes = {
             [routeKey]: {
-                accepts: {
-                    scheme: this.scheme,
-                    price: this.price,
-                    network: this.network,
-                    payTo: this.payTo
-                },
+                accepts: this.accepts.map(entry => ({
+                    scheme: entry.scheme,
+                    payTo: entry.payTo,
+                    price: entry.price,
+                    network: entry.network
+                })),
                 description: this.description,
                 mimeType: this.mimeType
             }
