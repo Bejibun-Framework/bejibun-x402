@@ -53,9 +53,7 @@ export default class X402Builder {
         }));
     }
     buildHttpServer(adapter) {
-        const facilitatorClient = new HTTPFacilitatorClient({
-            url: this.facilitator
-        });
+        const facilitatorClient = new HTTPFacilitatorClient(this.facilitator);
         const resourceServer = new x402ResourceServer(facilitatorClient);
         if (this.network.includes("eip155")) {
             resourceServer

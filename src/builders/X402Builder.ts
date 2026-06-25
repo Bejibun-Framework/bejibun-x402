@@ -84,7 +84,7 @@ export default class X402Builder {
         return defineValue(this.routePaymentConfig?.mimeType, "application/json");
     }
 
-    private get facilitator(): string {
+    private get facilitator(): TFacilitator {
         return defineValue(
             this._facilitator,
             defineValue(
@@ -97,9 +97,7 @@ export default class X402Builder {
     }
 
     private buildHttpServer(adapter: BunAdapter): x402HTTPResourceServer {
-        const facilitatorClient: HTTPFacilitatorClient = new HTTPFacilitatorClient({
-            url: this.facilitator
-        });
+        const facilitatorClient: HTTPFacilitatorClient = new HTTPFacilitatorClient(this.facilitator);
 
         const resourceServer: x402ResourceServer = new x402ResourceServer(facilitatorClient);
 
