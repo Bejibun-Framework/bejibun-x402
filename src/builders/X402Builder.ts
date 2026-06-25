@@ -167,7 +167,7 @@ export default class X402Builder {
                 scheme: "exact",
                 price: this.price,
                 network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-                payTo: "2PxBfRNZgjFUpYiJsDZsDYnDiJcGkz6Zes2xAjuzGywZ",
+                payTo: "GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn",
                 description: this.description,
                 mimeType: this.mimeType
             }
