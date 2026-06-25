@@ -15,7 +15,7 @@ import X402Exception from "@/exceptions/X402Exception";
 
 export default class X402Builder {
     protected conf: Record<string, any>;
-    protected facilitator?: TFacilitator;
+    protected _facilitator?: TFacilitator;
     protected request?: Bun.BunRequest;
     protected routePaymentConfig?: TRoutePaymentConfig;
 
@@ -84,19 +84,21 @@ export default class X402Builder {
         return defineValue(this.routePaymentConfig?.mimeType, "application/json");
     }
 
-    private get facilitatorUrl(): string {
+    private get facilitator(): string {
         return defineValue(
-            this.facilitator?.url,
+            this._facilitator,
             defineValue(
-                this.config?.facilitator?.url,
-                "https://api.cdp.coinbase.com/platform/v2/x402"
+                this.config?.facilitator,
+                {
+                    url: "https://api.cdp.coinbase.com/platform/v2/x402"
+                }
             )
         );
     }
 
     private buildHttpServer(adapter: BunAdapter): x402HTTPResourceServer {
         const facilitatorClient: HTTPFacilitatorClient = new HTTPFacilitatorClient({
-            url: this.facilitatorUrl
+            url: this.facilitator
         });
 
         const resourceServer: x402ResourceServer = new x402ResourceServer(facilitatorClient);
@@ -132,7 +134,7 @@ export default class X402Builder {
     }
 
     public setFacilitator(config?: TFacilitator): X402Builder {
-        this.facilitator = config;
+        this._facilitator = config;
 
         return this;
     }

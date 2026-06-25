@@ -12,7 +12,7 @@ import X402Config from "../config/x402";
 import X402Exception from "../exceptions/X402Exception";
 export default class X402Builder {
     conf;
-    facilitator;
+    _facilitator;
     request;
     routePaymentConfig;
     constructor() {
@@ -47,12 +47,14 @@ export default class X402Builder {
     get mimeType() {
         return defineValue(this.routePaymentConfig?.mimeType, "application/json");
     }
-    get facilitatorUrl() {
-        return defineValue(this.facilitator?.url, defineValue(this.config?.facilitator?.url, "https://api.cdp.coinbase.com/platform/v2/x402"));
+    get facilitator() {
+        return defineValue(this._facilitator, defineValue(this.config?.facilitator, {
+            url: "https://api.cdp.coinbase.com/platform/v2/x402"
+        }));
     }
     buildHttpServer(adapter) {
         const facilitatorClient = new HTTPFacilitatorClient({
-            url: this.facilitatorUrl
+            url: this.facilitator
         });
         const resourceServer = new x402ResourceServer(facilitatorClient);
         if (this.network.includes("eip155")) {
@@ -81,7 +83,7 @@ export default class X402Builder {
         return new x402HTTPResourceServer(resourceServer, routes);
     }
     setFacilitator(config) {
-        this.facilitator = config;
+        this._facilitator = config;
         return this;
     }
     setRoutePayment(config) {

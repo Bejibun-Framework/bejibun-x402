@@ -1,7 +1,7 @@
 import type { TFacilitator, TRoutePaymentConfig } from "../types/x402";
 export default class X402Builder {
     protected conf: Record<string, any>;
-    protected facilitator?: TFacilitator;
+    protected _facilitator?: TFacilitator;
     protected request?: Bun.BunRequest;
     protected routePaymentConfig?: TRoutePaymentConfig;
     constructor();
@@ -12,7 +12,7 @@ export default class X402Builder {
     private get scheme();
     private get description();
     private get mimeType();
-    private get facilitatorUrl();
+    private get facilitator();
     private buildHttpServer;
     setFacilitator(config?: TFacilitator): X402Builder;
     setRoutePayment(config?: TRoutePaymentConfig): X402Builder;
