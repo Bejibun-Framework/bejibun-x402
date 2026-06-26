@@ -4,6 +4,8 @@ export default class X402Builder {
     protected _facilitator?: TFacilitator;
     protected request?: Bun.BunRequest;
     protected routePaymentConfig?: TRoutePaymentConfig;
+    private static _serverCache;
+    private static _initPromises;
     constructor();
     private get config();
     private get scheme();

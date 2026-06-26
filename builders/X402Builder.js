@@ -1,6 +1,7 @@
-import { x402HTTPResourceServer } from "@x402/core/http";
 import App from "@bejibun/app";
 import { defineValue, isEmpty, isNotEmpty } from "@bejibun/utils";
+import { facilitator as CoinbaseFacilitator } from "@coinbase/x402";
+import { x402HTTPResourceServer } from "@x402/core/http";
 import { HTTPFacilitatorClient, getFacilitatorResponseError, x402ResourceServer } from "@x402/core/server";
 import { BatchSettlementEvmScheme } from "@x402/evm/batch-settlement/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
@@ -15,6 +16,9 @@ export default class X402Builder {
     _facilitator;
     request;
     routePaymentConfig;
+    // Static cache: persists across all X402Builder instances (new X402Builder() per request)
+    static _serverCache = new Map();
+    static _initPromises = new Map();
     constructor() {
         const configPath = App.Path.configPath("x402.ts");
         let config;
@@ -36,15 +40,13 @@ export default class X402Builder {
         return defineValue(this.routePaymentConfig?.price, defineValue(this.config.price, "$0.01"));
     }
     get description() {
-        return defineValue(this.routePaymentConfig?.description, "");
+        return defineValue(this.routePaymentConfig?.description, "Monetized endpoint with x402 protocol.");
     }
     get mimeType() {
         return defineValue(this.routePaymentConfig?.mimeType, "application/json");
     }
     get facilitator() {
-        return defineValue(this._facilitator, defineValue(this.config?.facilitator, {
-            url: "https://api.cdp.coinbase.com/platform/v2/x402"
-        }));
+        return defineValue(this._facilitator, defineValue(this.config?.facilitator, CoinbaseFacilitator));
     }
     /**
      * Resolve the accepts array for a route.
@@ -59,7 +61,7 @@ export default class X402Builder {
     get accepts() {
         // 1. Explicit accepts array on the route config
         if (!isEmpty(this.routePaymentConfig?.accepts)) {
-            return this.routePaymentConfig.accepts.map(entry => ({
+            return this.routePaymentConfig.accepts.map((entry) => ({
                 scheme: defineValue(entry.scheme, this.scheme),
                 price: defineValue(entry.price, this.price),
                 network: entry.network,
@@ -117,61 +119,93 @@ export default class X402Builder {
                     mimeType: this.mimeType
                 }];
         }
-        // 5. Built-in defaults: Base mainnet + Solana mainnet
+        // 5. Built-in defaults
+        const evmPayTo = "0xdABe8750061410D35cE52EB2a418c8cB004788B3";
+        const svmPayTo = "GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn";
+        const evmNetworks = ["eip155:8453", "eip155:137", "eip155:42161", "eip155:480"];
+        const svmNetworks = ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"];
         return [
-            {
+            ...evmNetworks.map((network) => ({
                 scheme: this.scheme,
                 price: this.price,
-                network: "eip155:8453",
-                payTo: "0xdABe8750061410D35cE52EB2a418c8cB004788B3",
+                network,
+                payTo: evmPayTo,
                 description: this.description,
                 mimeType: this.mimeType
-            },
-            {
+            })),
+            ...svmNetworks.map((network) => ({
                 scheme: "exact",
                 price: this.price,
-                network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-                payTo: "GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn",
+                network,
+                payTo: svmPayTo,
                 description: this.description,
                 mimeType: this.mimeType
-            }
+            }))
         ];
     }
-    buildHttpServer(adapter) {
-        const facilitatorClient = new HTTPFacilitatorClient(this.facilitator);
-        const resourceServer = new x402ResourceServer(facilitatorClient);
-        // Register schemes for every network in the accepts list
-        const registeredNetworks = new Set();
-        for (const entry of this.accepts) {
-            if (registeredNetworks.has(entry.network))
-                continue;
-            registeredNetworks.add(entry.network);
-            if (entry.network.includes("eip155")) {
-                const evmPayTo = entry.payTo;
-                resourceServer
-                    .register(entry.network, new ExactEvmScheme())
-                    .register(entry.network, new UptoEvmScheme())
-                    .register(entry.network, new BatchSettlementEvmScheme(evmPayTo));
+    async buildHttpServer(adapter) {
+        const cacheKey = `${adapter.getMethod()} ${adapter.getPath()}:${JSON.stringify(this.accepts)}`;
+        // Return already-initialized instance immediately
+        if (X402Builder._serverCache.has(cacheKey))
+            return X402Builder._serverCache.get(cacheKey);
+        // If another request is already initializing this same key, wait for it
+        // prevents duplicate servers with different feePayers being built simultaneously
+        if (X402Builder._initPromises.has(cacheKey))
+            return X402Builder._initPromises.get(cacheKey);
+        const initPromise = (async () => {
+            try {
+                const facilitatorClient = new HTTPFacilitatorClient(this.facilitator);
+                const resourceServer = new x402ResourceServer(facilitatorClient);
+                const registeredNetworks = new Set();
+                for (const entry of this.accepts) {
+                    if (registeredNetworks.has(entry.network))
+                        continue;
+                    registeredNetworks.add(entry.network);
+                    if (entry.network.startsWith("eip155:")) {
+                        const evmPayTo = entry.payTo;
+                        resourceServer
+                            .register(entry.network, new ExactEvmScheme())
+                            .register(entry.network, new UptoEvmScheme())
+                            .register(entry.network, new BatchSettlementEvmScheme(evmPayTo));
+                    }
+                    if (entry.network.startsWith("solana:")) {
+                        resourceServer.register(entry.network, new ExactSvmScheme());
+                    }
+                }
+                const routeKey = `${adapter.getMethod()} ${adapter.getPath()}`;
+                const routes = {
+                    [routeKey]: {
+                        accepts: this.accepts.map(entry => ({
+                            scheme: entry.scheme,
+                            payTo: entry.payTo,
+                            price: entry.price,
+                            network: entry.network
+                        })),
+                        description: this.description,
+                        mimeType: this.mimeType
+                    }
+                };
+                const httpServer = new x402HTTPResourceServer(resourceServer, routes);
+                // initialize ONCE — this locks in the SVM feePayer
+                try {
+                    await httpServer.initialize();
+                }
+                catch (error) {
+                    const facilitatorError = getFacilitatorResponseError(error);
+                    if (isNotEmpty(facilitatorError)) {
+                        throw new X402Exception(facilitatorError.message);
+                    }
+                }
+                X402Builder._serverCache.set(cacheKey, httpServer);
+                return httpServer;
             }
-            if (entry.network.includes("solana")) {
-                resourceServer
-                    .register(entry.network, new ExactSvmScheme());
+            finally {
+                // Always clean up the in-flight promise, success or failure
+                X402Builder._initPromises.delete(cacheKey);
             }
-        }
-        const routeKey = `${adapter.getMethod()} ${adapter.getPath()}`;
-        const routes = {
-            [routeKey]: {
-                accepts: this.accepts.map(entry => ({
-                    scheme: entry.scheme,
-                    payTo: entry.payTo,
-                    price: entry.price,
-                    network: entry.network
-                })),
-                description: this.description,
-                mimeType: this.mimeType
-            }
-        };
-        return new x402HTTPResourceServer(resourceServer, routes);
+        })();
+        X402Builder._initPromises.set(cacheKey, initPromise);
+        return initPromise;
     }
     setFacilitator(config) {
         this._facilitator = config;
@@ -197,15 +231,8 @@ export default class X402Builder {
         if (isEmpty(this.request))
             throw new X402Exception("setRequest() must be called before middleware().");
         const adapter = new BunAdapter(this.request);
-        const httpServer = this.buildHttpServer(adapter);
-        try {
-            await httpServer.initialize();
-        }
-        catch (error) {
-            const facilitatorError = getFacilitatorResponseError(error);
-            if (isNotEmpty(facilitatorError))
-                throw new X402Exception(facilitatorError.message);
-        }
+        // buildHttpServer is now async and handles initialize() internally, only once per route
+        const httpServer = await this.buildHttpServer(adapter);
         const context = {
             adapter,
             path: adapter.getPath(),
