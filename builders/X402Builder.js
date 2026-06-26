@@ -1,7 +1,7 @@
 import { x402HTTPResourceServer } from "@x402/core/http";
 import App from "@bejibun/app";
-import { defineValue, isEmpty } from "@bejibun/utils";
-import { HTTPFacilitatorClient, x402ResourceServer } from "@x402/core/server";
+import { defineValue, isEmpty, isNotEmpty } from "@bejibun/utils";
+import { HTTPFacilitatorClient, getFacilitatorResponseError, x402ResourceServer } from "@x402/core/server";
 import { BatchSettlementEvmScheme } from "@x402/evm/batch-settlement/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { UptoEvmScheme } from "@x402/evm/upto/server";
@@ -131,7 +131,7 @@ export default class X402Builder {
                 scheme: "exact",
                 price: this.price,
                 network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-                payTo: "2PxBfRNZgjFUpYiJsDZsDYnDiJcGkz6Zes2xAjuzGywZ",
+                payTo: "GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn",
                 description: this.description,
                 mimeType: this.mimeType
             }
@@ -198,51 +198,123 @@ export default class X402Builder {
             throw new X402Exception("setRequest() must be called before middleware().");
         const adapter = new BunAdapter(this.request);
         const httpServer = this.buildHttpServer(adapter);
-        await httpServer.initialize();
+        try {
+            await httpServer.initialize();
+        }
+        catch (error) {
+            const facilitatorError = getFacilitatorResponseError(error);
+            if (isNotEmpty(facilitatorError))
+                throw new X402Exception(facilitatorError.message);
+        }
         const context = {
             adapter,
-            method: adapter.getMethod(),
             path: adapter.getPath(),
-            paymentHeader: defineValue(adapter.getHeader("x-payment"), adapter.getHeader("PAYMENT-SIGNATURE"))
+            method: adapter.getMethod(),
+            paymentHeader: defineValue(adapter.getHeader("payment-signature"), adapter.getHeader("x-payment"))
         };
-        const result = await httpServer.processHTTPRequest(context);
+        let result = {
+            type: "no-payment-required"
+        };
+        try {
+            result = await httpServer.processHTTPRequest(context);
+        }
+        catch (error) {
+            throw new X402Exception(error.message);
+        }
+        const corsHeaders = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": "*"
+        };
         switch (result.type) {
             case "no-payment-required":
-                // Route not protected (shouldn't happen, but handle gracefully)
                 return handler();
-            case "payment-error":
-                // Framework should return the 402 response as instructed
+            case "payment-error": {
                 const { status, headers, body, isHtml } = result.response;
                 return new Response(isEmpty(body) ? null : JSON.stringify(body), {
                     headers: {
                         ...headers,
                         "Content-Type": isHtml ? "text/html" : this.mimeType,
-                        "Access-Control-Allow-Origin": "*",
-                        "Access-Control-Expose-Headers": "*"
+                        ...corsHeaders
                     },
                     status
                 });
-            case "payment-verified":
-                // Run handler first, then settle
-                const handlerResponse = await handler();
-                // Only settle on successful handler responses (status < 400)
-                if (handlerResponse.status < 400) {
-                    const settlement = await httpServer.processSettlement(result.paymentPayload, result.paymentRequirements);
-                    if (settlement.success) {
-                        const headers = new Headers(handlerResponse.headers);
-                        Object.entries(settlement.headers).forEach(([k, v]) => headers.set(k, v));
-                        return new Response(handlerResponse.body, {
+            }
+            case "payment-verified": {
+                const { cancellationDispatcher, paymentPayload, paymentRequirements, declaredExtensions } = result;
+                // Run handler, cancel on throw
+                let handlerResponse;
+                try {
+                    handlerResponse = await handler();
+                }
+                catch (error) {
+                    await cancellationDispatcher?.cancel({ reason: "handler_threw", error });
+                    throw new X402Exception(error.message);
+                }
+                // Cancel settlement on handler error responses (4xx/5xx)
+                if (handlerResponse.status >= 400) {
+                    await cancellationDispatcher?.cancel({
+                        reason: "handler_failed",
+                        responseStatus: handlerResponse.status
+                    });
+                    return handlerResponse;
+                }
+                // Read body for settlement context
+                const responseBody = await handlerResponse.arrayBuffer();
+                const responseHeaders = {};
+                handlerResponse.headers.forEach((value, key) => {
+                    responseHeaders[key] = value;
+                });
+                // Settle payment
+                try {
+                    const settlement = await httpServer.processSettlement(paymentPayload, paymentRequirements, declaredExtensions, {
+                        request: context,
+                        responseBody: Buffer.from(responseBody),
+                        responseHeaders
+                    });
+                    if (!settlement.success) {
+                        const { status, headers, body, isHtml } = settlement.response;
+                        return new Response(isEmpty(body) ? null : JSON.stringify(body), {
                             headers: {
                                 ...headers,
-                                "Content-Type": this.mimeType,
-                                "Access-Control-Allow-Origin": "*",
-                                "Access-Control-Expose-Headers": "*"
+                                "Content-Type": isHtml ? "text/html" : this.mimeType,
+                                ...corsHeaders
                             },
-                            status: handlerResponse.status
+                            status
                         });
                     }
+                    // Merge settlement headers into response
+                    const mergedHeaders = new Headers(handlerResponse.headers);
+                    Object.entries(settlement.headers).forEach(([k, v]) => mergedHeaders.set(k, v));
+                    Object.entries(corsHeaders).forEach(([k, v]) => mergedHeaders.set(k, v));
+                    mergedHeaders.set("Content-Type", this.mimeType);
+                    return new Response(responseBody, {
+                        headers: mergedHeaders,
+                        status: handlerResponse.status
+                    });
                 }
-                return handlerResponse;
+                catch (error) {
+                    const facilitatorError = getFacilitatorResponseError(error);
+                    if (isNotEmpty(facilitatorError)) {
+                        return new Response(JSON.stringify({
+                            error: facilitatorError.message
+                        }), {
+                            headers: {
+                                "Content-Type": "application/json",
+                                ...corsHeaders
+                            },
+                            status: 502
+                        });
+                    }
+                    // Fallback: return 402 like Express does
+                    return new Response(JSON.stringify({}), {
+                        headers: {
+                            "Content-Type": "application/json",
+                            ...corsHeaders
+                        },
+                        status: 402
+                    });
+                }
+            }
             default:
                 throw new X402Exception("Whoops, something went wrong. Please try again...");
         }
