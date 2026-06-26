@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [v0.2.0](https://github.com/Bejibun-Framework/bejibun-x402/compare/v0.1.0...v0.2.0) - 2026-06-25
+## [v0.2.0](https://github.com/Bejibun-Framework/bejibun-x402/compare/v0.1.0...v0.2.0) - 2026-06-26
 
 ### 🩹 Fixes
 - Initial release with EVM-only support.
@@ -22,7 +22,7 @@ Changes:
 - `buildHttpServer` iterates the full `accepts` list to register all required schemes instead of branching on a single network string.
 
 
-### Backward Compatible
+### 🔄 Backward Compatible
 - Single-network `network` + `payTo` on `TRoutePaymentConfig` still works (treated as a single-entry accepts list).
 - Legacy `config.network` + `config.payTo` in project config files still work (priority 4 fallback).
 
