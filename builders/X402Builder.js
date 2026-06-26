@@ -60,7 +60,7 @@ export default class X402Builder {
      */
     get accepts() {
         // 1. Explicit accepts array on the route config
-        if (!isEmpty(this.routePaymentConfig?.accepts)) {
+        if (isNotEmpty(this.routePaymentConfig?.accepts)) {
             return this.routePaymentConfig.accepts.map((entry) => ({
                 scheme: defineValue(entry.scheme, this.scheme),
                 price: defineValue(entry.price, this.price),
@@ -71,7 +71,7 @@ export default class X402Builder {
             }));
         }
         // 2. Single-network shorthand on the route config
-        if (!isEmpty(this.routePaymentConfig?.network) && !isEmpty(this.routePaymentConfig?.payTo)) {
+        if (isNotEmpty(this.routePaymentConfig?.network) && isNotEmpty(this.routePaymentConfig?.payTo)) {
             return [{
                     scheme: this.scheme,
                     price: this.price,
@@ -82,44 +82,17 @@ export default class X402Builder {
                 }];
         }
         // 3. Multi-network block in config file
-        if (!isEmpty(this.config.networks)) {
-            const networks = this.config.networks;
-            const result = [];
-            if (!isEmpty(networks.evm?.network) && !isEmpty(networks.evm?.payTo)) {
-                result.push({
-                    scheme: this.scheme,
-                    price: this.price,
-                    network: networks.evm.network,
-                    payTo: networks.evm.payTo,
-                    description: this.description,
-                    mimeType: this.mimeType
-                });
-            }
-            if (!isEmpty(networks.svm?.network) && !isEmpty(networks.svm?.payTo)) {
-                result.push({
-                    scheme: defineValue(networks.svm.scheme, "exact"),
-                    price: this.price,
-                    network: networks.svm.network,
-                    payTo: networks.svm.payTo,
-                    description: this.description,
-                    mimeType: this.mimeType
-                });
-            }
-            if (!isEmpty(result))
-                return result;
+        if (isNotEmpty(this.config.networks)) {
+            return this.config.networks.map((entry) => ({
+                scheme: this.scheme,
+                price: this.price,
+                network: entry.network,
+                payTo: entry.payTo,
+                description: this.description,
+                mimeType: this.mimeType
+            }));
         }
-        // 4. Legacy single-network fields in config file
-        if (!isEmpty(this.config.network) && !isEmpty(this.config.payTo)) {
-            return [{
-                    scheme: this.scheme,
-                    price: this.price,
-                    network: this.config.network,
-                    payTo: this.config.payTo,
-                    description: this.description,
-                    mimeType: this.mimeType
-                }];
-        }
-        // 5. Built-in defaults
+        // 4. Built-in defaults
         const evmPayTo = "0xdABe8750061410D35cE52EB2a418c8cB004788B3";
         const svmPayTo = "GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn";
         const evmNetworks = ["eip155:8453", "eip155:137", "eip155:42161", "eip155:480"];
