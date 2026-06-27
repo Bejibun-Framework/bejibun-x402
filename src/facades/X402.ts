@@ -1,4 +1,4 @@
-import type {TFacilitator, TRoutePaymentConfig} from "@/types/x402";
+import type {TFacilitator, TRoutePayment} from "@/types/x402";
 import X402Builder from "@/builders/X402Builder";
 
 export default class X402 {
@@ -6,7 +6,7 @@ export default class X402 {
         return new X402Builder().setFacilitator(config);
     }
 
-    public static setRoutePayment(config?: TRoutePaymentConfig): X402Builder {
+    public static setRoutePayment(config?: TRoutePayment): X402Builder {
         return new X402Builder().setRoutePayment(config);
     }
 

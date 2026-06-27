@@ -1,26 +1,42 @@
-export type TScheme = "exact" | "upto" | "batch-settlement";
+export type TAssetAmount = {
+    asset: string;
+    amount: string;
+    extra?: Record<string, unknown>;
+};
 
 export type TFacilitator = {
     url?: string;
+    createAuthHeaders?: () => Promise<{
+        verify: Record<string, string>;
+        settle: Record<string, string>;
+        supported: Record<string, string>;
+        bazaar?: Record<string, string>;
+    }>;
 };
 
-export type Network = `${string}:${string}`;
+export type TNetwork = `${string}:${string}`;
 
-export type TNetworkPaymentConfig = {
+export type TMoney = string | number;
+
+export type TPrice = TAssetAmount | TMoney;
+
+export type TScheme = "exact" | "upto" | "batch-settlement";
+
+export type TNetworkPayment = {
     scheme?: TScheme;
-    price?: string;
-    network: Network;
+    price?: TPrice;
+    network: TNetwork;
     payTo: string;
     description?: string;
     mimeType?: string;
 };
 
-export type TRoutePaymentConfig = {
+export type TRoutePayment = {
     scheme?: TScheme;
-    price?: string;
-    network: Network;
+    price?: TPrice;
+    network: TNetwork;
     payTo?: string;
     description?: string;
     mimeType?: string;
-    accepts?: TNetworkPaymentConfig[];
+    accepts?: Array<TNetworkPayment>;
 };

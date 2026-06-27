@@ -1,5 +1,5 @@
 import type {HTTPProcessResult, HTTPRequestContext, PaymentOption, RoutesConfig} from "@x402/core/http";
-import type {Network, TFacilitator, TNetworkPaymentConfig, TRoutePaymentConfig, TScheme} from "@/types/x402";
+import type {TFacilitator, TNetwork, TNetworkPayment, TPrice, TRoutePayment, TScheme} from "@/types/x402";
 import App from "@bejibun/app";
 import {defineValue, isEmpty, isNotEmpty} from "@bejibun/utils";
 import {facilitator as CoinbaseFacilitator} from "@coinbase/x402";
@@ -23,7 +23,7 @@ export default class X402Builder {
     protected conf: Record<string, any>;
     protected _facilitator?: TFacilitator;
     protected request?: Bun.BunRequest;
-    protected routePaymentConfig?: TRoutePaymentConfig;
+    protected routePaymentConfig?: TRoutePayment;
 
     // Static cache: persists across all X402Builder instances (new X402Builder() per request)
     private static _serverCache = new Map<string, x402HTTPResourceServer>();
@@ -56,12 +56,12 @@ export default class X402Builder {
         );
     }
 
-    private get price(): string {
+    private get price(): TPrice {
         return defineValue(
             this.routePaymentConfig?.price,
             defineValue(
                 this.config.price,
-                "$0.01"
+                "$1"
             )
         );
     }
@@ -94,10 +94,10 @@ export default class X402Builder {
      *   4. config single-network fields (legacy)
      *   5. built-in defaults (EVM Base + Solana mainnet)
      */
-    private get accepts(): Array<TNetworkPaymentConfig> {
+    private get accepts(): Array<TNetworkPayment> {
         // 1. Explicit accepts array on the route config
         if (isNotEmpty(this.routePaymentConfig?.accepts)) {
-            return this.routePaymentConfig!.accepts!.map((entry: TNetworkPaymentConfig) => ({
+            return this.routePaymentConfig!.accepts!.map((entry: TNetworkPayment) => ({
                 scheme: defineValue(entry.scheme, this.scheme),
                 price: defineValue(entry.price, this.price),
                 network: entry.network,
@@ -122,7 +122,7 @@ export default class X402Builder {
         // 3. Multi-network block in config file
         if (isNotEmpty(this.config.networks)) {
             return this.config.networks!.map((entry: {
-                network: Network;
+                network: TNetwork;
                 payTo: string;
             }) => ({
                 scheme: this.scheme,
@@ -138,11 +138,11 @@ export default class X402Builder {
         const evmPayTo: string = "0xdABe8750061410D35cE52EB2a418c8cB004788B3";
         const svmPayTo: string = "GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn";
 
-        const evmNetworks: Array<Network> = ["eip155:8453", "eip155:137", "eip155:42161", "eip155:480"];
-        const svmNetworks: Array<Network> = ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"];
+        const evmNetworks: Array<TNetwork> = ["eip155:8453", "eip155:137", "eip155:42161", "eip155:480"];
+        const svmNetworks: Array<TNetwork> = ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"];
 
         return [
-            ...evmNetworks.map((network: Network) => ({
+            ...evmNetworks.map((network: TNetwork) => ({
                 scheme: this.scheme,
                 price: this.price,
                 network,
@@ -150,7 +150,7 @@ export default class X402Builder {
                 description: this.description,
                 mimeType: this.mimeType
             })),
-            ...svmNetworks.map((network: Network) => ({
+            ...svmNetworks.map((network: TNetwork) => ({
                 scheme: "exact" as TScheme,
                 price: this.price,
                 network,
@@ -241,7 +241,7 @@ export default class X402Builder {
         return this;
     }
 
-    public setRoutePayment(config?: TRoutePaymentConfig): X402Builder {
+    public setRoutePayment(config?: TRoutePayment): X402Builder {
         this.routePaymentConfig = config;
 
         return this;

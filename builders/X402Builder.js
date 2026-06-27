@@ -37,7 +37,7 @@ export default class X402Builder {
         return defineValue(this.routePaymentConfig?.scheme, defineValue(this.config.scheme, "exact"));
     }
     get price() {
-        return defineValue(this.routePaymentConfig?.price, defineValue(this.config.price, "$0.01"));
+        return defineValue(this.routePaymentConfig?.price, defineValue(this.config.price, "$1"));
     }
     get description() {
         return defineValue(this.routePaymentConfig?.description, "Monetized endpoint with x402 protocol.");

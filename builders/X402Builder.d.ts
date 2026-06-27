@@ -1,9 +1,9 @@
-import type { TFacilitator, TRoutePaymentConfig } from "../types/x402";
+import type { TFacilitator, TRoutePayment } from "../types/x402";
 export default class X402Builder {
     protected conf: Record<string, any>;
     protected _facilitator?: TFacilitator;
     protected request?: Bun.BunRequest;
-    protected routePaymentConfig?: TRoutePaymentConfig;
+    protected routePaymentConfig?: TRoutePayment;
     private static _serverCache;
     private static _initPromises;
     constructor();
@@ -26,7 +26,7 @@ export default class X402Builder {
     private get accepts();
     private buildHttpServer;
     setFacilitator(config?: TFacilitator): X402Builder;
-    setRoutePayment(config?: TRoutePaymentConfig): X402Builder;
+    setRoutePayment(config?: TRoutePayment): X402Builder;
     setRequest(request: Bun.BunRequest): X402Builder;
     /**
      * Run x402 payment verification and settlement via @x402/core directly.
