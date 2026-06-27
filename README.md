@@ -78,13 +78,10 @@ return X402
     });
 ```
 
-## Contributors
-- [Havea Crenata](mailto:havea.crenata@gmail.com)
-
 ## ☕ Support / Donate
 
 If you find this project helpful and want to support it:
 
 [![Donate](https://img.shields.io/badge/Donate-Support%20Me-orange?style=for-the-badge)](https://donatr.ee/bejibun-framework)
 
-Or you can buy this `$BJBN (Bejibun)` tokens [here](https://pump.fun/coin/CQhbNnCGKfDaKXt8uE61i5DrBYJV7NPsCDD9vQgypump), beware of bots.
+Or you can buy this `$BJBN (Bejibun)` tokens [here](https://pump.fun/coin/CQhbNnCGKfDaKXt8uE61i5DrBYJV7NPsCDD9vQgypump).
