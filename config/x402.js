@@ -1,6 +1,5 @@
 import { facilitator } from "@coinbase/x402";
 const config = {
-    version: 2,
     scheme: "exact",
     price: "$1",
     networks: [
