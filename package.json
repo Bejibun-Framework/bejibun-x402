@@ -13,9 +13,9 @@
         "@bejibun/logger": "^0.1.22",
         "@bejibun/utils": "^0.1.28",
         "@coinbase/x402": "^2.1.0",
-        "@x402/core": "^2.16.0",
-        "@x402/evm": "^2.16.0",
-        "@x402/svm": "^2.16.0"
+        "@x402/core": "^2.17.0",
+        "@x402/evm": "^2.17.0",
+        "@x402/svm": "^2.17.0"
     },
     "devDependencies": {
         "@types/bun": "latest",
