@@ -8,14 +8,23 @@
     },
     "main": "index.js",
     "module": "index.js",
+    "dependencies": {
+        "@bejibun/app": "^0.1.24",
+        "@bejibun/logger": "^0.1.22",
+        "@bejibun/utils": "^0.1.28",
+        "@coinbase/x402": "^2.1.0",
+        "@x402/core": "^2.17.0",
+        "@x402/evm": "^2.17.0",
+        "@x402/svm": "^2.17.0"
+    },
     "devDependencies": {
         "@types/bun": "latest",
-        "tsc-alias": "^1.8.16"
+        "tsc-alias": "^1.8.17"
     },
     "bugs": {
         "url": "https://github.com/Bejibun-Framework/bejibun-x402/issues"
     },
-    "description": "Cache for Bejibun Framework",
+    "description": "x402 Protocol for Bejibun Framework",
     "homepage": "https://github.com/Bejibun-Framework/bejibun-x402#readme",
     "keywords": [
         "bun",
@@ -27,17 +36,12 @@
     "license": "MIT",
     "scripts": {
         "alias": "bunx tsc-alias -p tsconfig.json",
+        "types": "cp -rf src/types dist",
         "rsync": "rsync -a dist/ ./",
         "clean": "rm -rf dist",
-        "build": "bunx tsc -p tsconfig.json && bun run alias && bun run rsync && bun run clean",
+        "build": "bunx tsc -p tsconfig.json && bun run types && bun run alias && bun run rsync && bun run clean",
         "deploy": "bun run build && bun publish --access public"
     },
     "type": "module",
-    "types": "index.d.ts",
-    "dependencies": {
-        "@bejibun/app": "^0.1.22",
-        "@bejibun/logger": "^0.1.22",
-        "@bejibun/utils": "^0.1.28",
-        "x402": "^0.7.3"
-    }
+    "types": "index.d.ts"
 }

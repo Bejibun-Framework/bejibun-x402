@@ -1,44 +1,39 @@
-import { ERC20TokenAmount, FacilitatorConfig, PaymentPayload, PaymentRequirements, PaywallConfig, SPLTokenAmount } from "x402/types";
-export type TX402Config = {
-    customPaywallHtml?: string;
-    description?: string;
-    discoverable?: boolean;
-    mimeType?: string;
-    inputSchema?: Record<string, any>;
-    outputSchema?: Record<string, any>;
-};
-export type TFacilitator = {
-    verify: (payload: any, paymentRequirements: any) => Promise<any>;
-    settle: (payload: any, paymentRequirements: any) => Promise<any>;
-    supported: () => Promise<any>;
-    list: (config?: any) => Promise<any>;
-};
-export type TToken = {
-    maxAmountRequired: string;
-    asset?: ERC20TokenAmount["asset"] | SPLTokenAmount["asset"];
-};
+import type { TFacilitator, TRoutePayment } from "../types/x402";
 export default class X402Builder {
     protected conf: Record<string, any>;
-    protected facilitatorConfig?: FacilitatorConfig;
-    protected payloadConfig?: TX402Config;
-    protected paymentRequirements: Array<PaymentRequirements>;
-    protected paywallConfig?: PaywallConfig;
+    protected _facilitator?: TFacilitator;
     protected request?: Bun.BunRequest;
-    protected decoded?: PaymentPayload;
-    protected token?: TToken;
+    protected routePaymentConfig?: TRoutePayment;
+    private static _serverCache;
+    private static _initPromises;
     constructor();
     private get config();
+    private get scheme();
+    private get price();
+    private get description();
+    private get mimeType();
     private get facilitator();
-    private initToken;
-    private requirements;
-    private get payment();
-    private decode;
-    private get selectedPayment();
-    private verify;
-    private settle;
-    setConfig(config?: TX402Config): X402Builder;
-    setFacilitator(config?: FacilitatorConfig): X402Builder;
-    setPaywall(config?: PaywallConfig): X402Builder;
+    /**
+     * Resolve the accepts array for a route.
+     *
+     * Priority order:
+     *   1. routePaymentConfig.accepts  — explicit multi-network list
+     *   2. routePaymentConfig single-network fields (network + payTo)
+     *   3. config.networks             — both EVM + SVM from config file
+     *   4. built-in defaults (EVM Base + Solana mainnet)
+     */
+    private get accepts();
+    private buildHttpServer;
+    setFacilitator(config?: TFacilitator): X402Builder;
+    setRoutePayment(config?: TRoutePayment): X402Builder;
     setRequest(request: Bun.BunRequest): X402Builder;
-    middleware(handler: Function): Promise<any>;
+    /**
+     * Run x402 payment verification and settlement via @x402/core directly.
+     *
+     * Flow:
+     *   - No payment header  -> 402 + PAYMENT-REQUIRED header
+     *   - Invalid payment    -> 402 + PAYMENT-REQUIRED header (with error)
+     *   - Valid payment      -> verifies, calls handler(), settles, attaches PAYMENT-RESPONSE header
+     */
+    middleware(handler: () => Promise<Response>): Promise<Response>;
 }

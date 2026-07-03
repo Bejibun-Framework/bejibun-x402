@@ -37,15 +37,17 @@ Add `x402.ts` inside config directory on your project if doesn't exist.
 config/x402.ts
 ```
 
-```ts
+```ts config/x402.ts
 const config: Record<string, any> = {
-    version: 1,
-    network: "base-sepolia",
-    address: "0x0000000000000000000000000000000000000000",
+    version: 2,
+    network: "eip155:84532",
+    address: "0xdABe8750061410D35cE52EB2a418c8cB004788B3",
     price: "$0.01",
+    scheme: "exact",
     timeout: 60,
     forceJson: false,
-    testnet: true
+    testnet: true,
+    facilitatorUrl: "https://x402.org/facilitator"
 };
 
 export default config;
@@ -57,47 +59,29 @@ You can pass the value with environment variables.
 How to use tha package.
 
 ```ts
-import type {TX402Config} from "@bejibun/x402";
-import type {FacilitatorConfig, PaywallConfig} from "x402/types";
+import type {TFacilitator, TRoutePaymentConfig} from "@/types/x402";
 import X402 from "@bejibun/x402";
 
 /**
- * setConfig(config?: TX402Config)
- * {
- *     customPaywallHtml?: string;
- *     description?: string;
- *     discoverable?: boolean;
- *     mimeType?: string;
- *     inputSchema?: Record<string, any>;
- *     outputSchema?: Record<string, any>;
- * }
+ * setFacilitator(config?: TFacilitator)
  * 
- * setFacilitator(config?: FacilitatorConfig)
+ * setRoutePayment(config?: TRoutePaymentConfig)
  * 
- * setPaywall(config?: PaywallConfig)
- * 
- * setRequest(config: Bun.BunRequest) // Mandatory for request headers
+ * setRequest(request: Bun.BunRequest) // Mandatory for request headers
  */
 return X402
-    .setConfig()
     .setFacilitator()
-    .setPaywall()
+    .setRoutePayment()
     .setRequest(request)
     .middleware(() => {
         // your paid resource here
     });
 ```
 
-## Contributors
-- [Havea Crenata](mailto:havea.crenata@gmail.com)
-
 ## ☕ Support / Donate
 
-If you find this project helpful and want to support it, you can donate via crypto :
+If you find this project helpful and want to support it:
 
-| EVM                                                                                                     | Solana                                                                                                  |
-| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| <img src="https://github.com/Bejibun-Framework/bejibun/blob/master/public/images/EVM.png?raw=true" width="150" /> | <img src="https://github.com/Bejibun-Framework/bejibun/blob/master/public/images/SOL.png?raw=true" width="150" /> |
-| 0xdABe8750061410D35cE52EB2a418c8cB004788B3                                                              | GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn                                                            |
+[![Donate](https://img.shields.io/badge/Donate-Support%20Me-orange?style=for-the-badge)](https://donatr.ee/bejibun-framework)
 
-Or you can buy this `$BJBN (Bejibun)` tokens [here](https://pump.fun/coin/CQhbNnCGKfDaKXt8uE61i5DrBYJV7NPsCDD9vQgypump), beware of bots.
+Or you can buy this `$BJBN (Bejibun)` tokens [here](https://pump.fun/coin/CQhbNnCGKfDaKXt8uE61i5DrBYJV7NPsCDD9vQgypump).
