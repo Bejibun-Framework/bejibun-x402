@@ -55,8 +55,7 @@ export default class X402Builder {
      *   1. routePaymentConfig.accepts  — explicit multi-network list
      *   2. routePaymentConfig single-network fields (network + payTo)
      *   3. config.networks             — both EVM + SVM from config file
-     *   4. config single-network fields (legacy)
-     *   5. built-in defaults (EVM Base + Solana mainnet)
+     *   4. built-in defaults (EVM Base + Solana mainnet)
      */
     get accepts() {
         // 1. Explicit accepts array on the route config
