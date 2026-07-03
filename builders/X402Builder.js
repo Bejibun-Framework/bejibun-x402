@@ -226,7 +226,7 @@ export default class X402Builder {
         };
         switch (result.type) {
             case "no-payment-required":
-                return handler();
+                return await handler();
             case "payment-error": {
                 const { status, headers, body, isHtml } = result.response;
                 return new Response(isEmpty(body) ? null : JSON.stringify(body), {

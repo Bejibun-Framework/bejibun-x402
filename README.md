@@ -38,16 +38,23 @@ config/x402.ts
 ```
 
 ```ts config/x402.ts
+import type {TFacilitator, TNetwork, TPrice, TScheme} from "@bejibun/x402/types";
+import {facilitator} from "@coinbase/x402";
+
 const config: Record<string, any> = {
-    version: 2,
-    network: "eip155:84532",
-    address: "0xdABe8750061410D35cE52EB2a418c8cB004788B3",
-    price: "$0.01",
-    scheme: "exact",
-    timeout: 60,
-    forceJson: false,
-    testnet: true,
-    facilitatorUrl: "https://x402.org/facilitator"
+    scheme: "exact" as TScheme,
+    price: "$1" as TPrice,
+    networks: [
+        {
+            network: "eip155:8453" as TNetwork,
+            payTo: "0xdABe8750061410D35cE52EB2a418c8cB004788B3"
+        },
+        {
+            network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" as TNetwork,
+            payTo: "GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn"
+        }
+    ],
+    facilitator: facilitator as TFacilitator
 };
 
 export default config;
@@ -59,7 +66,7 @@ You can pass the value with environment variables.
 How to use tha package.
 
 ```ts
-import type {TFacilitator, TRoutePaymentConfig} from "@/types/x402";
+import type {TFacilitator, TRoutePaymentConfig} from "@bejibun/x402/types";
 import X402 from "@bejibun/x402";
 
 /**
@@ -69,11 +76,11 @@ import X402 from "@bejibun/x402";
  * 
  * setRequest(request: Bun.BunRequest) // Mandatory for request headers
  */
-return X402
+return await X402
     .setFacilitator()
     .setRoutePayment()
     .setRequest(request)
-    .middleware(() => {
+    .middleware(async () => {
         // your paid resource here
     });
 ```
