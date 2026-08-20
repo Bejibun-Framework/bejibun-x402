@@ -70,15 +70,18 @@ export default class X402Builder {
             }));
         }
         // 2. Single-network shorthand on the route config
-        if (isNotEmpty(this.routePaymentConfig?.network) && isNotEmpty(this.routePaymentConfig?.payTo)) {
-            return [{
+        if (isNotEmpty(this.routePaymentConfig?.network) &&
+            isNotEmpty(this.routePaymentConfig?.payTo)) {
+            return [
+                {
                     scheme: this.scheme,
                     price: this.price,
                     network: this.routePaymentConfig.network,
                     payTo: this.routePaymentConfig.payTo,
                     description: this.description,
                     mimeType: this.mimeType
-                }];
+                }
+            ];
         }
         // 3. Multi-network block in config file
         if (isNotEmpty(this.config.networks)) {
@@ -94,7 +97,12 @@ export default class X402Builder {
         // 4. Built-in defaults
         const evmPayTo = "0xdABe8750061410D35cE52EB2a418c8cB004788B3";
         const svmPayTo = "GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn";
-        const evmNetworks = ["eip155:8453", "eip155:137", "eip155:42161", "eip155:480"];
+        const evmNetworks = [
+            "eip155:8453",
+            "eip155:137",
+            "eip155:42161",
+            "eip155:480"
+        ];
         const svmNetworks = ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"];
         return [
             ...evmNetworks.map((network) => ({
@@ -147,7 +155,7 @@ export default class X402Builder {
                 const routeKey = `${adapter.getMethod()} ${adapter.getPath()}`;
                 const routes = {
                     [routeKey]: {
-                        accepts: this.accepts.map(entry => ({
+                        accepts: this.accepts.map((entry) => ({
                             scheme: entry.scheme,
                             payTo: entry.payTo,
                             price: entry.price,
@@ -211,14 +219,17 @@ export default class X402Builder {
             method: adapter.getMethod(),
             paymentHeader: defineValue(adapter.getHeader("payment-signature"), adapter.getHeader("x-payment"))
         };
-        let result = {
-            type: "no-payment-required"
-        };
+        let result;
         try {
             result = await httpServer.processHTTPRequest(context);
         }
         catch (error) {
             throw new X402Exception(error.message);
+        }
+        if (isEmpty(result)) {
+            result = {
+                type: "no-payment-required"
+            };
         }
         const corsHeaders = {
             "Access-Control-Allow-Origin": "*",

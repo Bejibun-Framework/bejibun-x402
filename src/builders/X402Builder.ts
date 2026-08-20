@@ -1,5 +1,17 @@
-import type {HTTPProcessResult, HTTPRequestContext, PaymentOption, RoutesConfig} from "@x402/core/http";
-import type {TFacilitator, TNetwork, TNetworkPayment, TPrice, TRoutePayment, TScheme} from "@/types/x402";
+import type {
+    HTTPProcessResult,
+    HTTPRequestContext,
+    PaymentOption,
+    RoutesConfig
+} from "@x402/core/http";
+import type {
+    TFacilitator,
+    TNetwork,
+    TNetworkPayment,
+    TPrice,
+    TRoutePayment,
+    TScheme
+} from "@/types/x402";
 import App from "@bejibun/app";
 import {defineValue, isEmpty, isNotEmpty} from "@bejibun/utils";
 import {facilitator as CoinbaseFacilitator} from "@coinbase/x402";
@@ -49,25 +61,19 @@ export default class X402Builder {
     private get scheme(): TScheme {
         return defineValue(
             this.routePaymentConfig?.scheme,
-            defineValue(
-                this.config.scheme,
-                "exact"
-            )
+            defineValue(this.config.scheme, "exact")
         );
     }
 
     private get price(): TPrice {
-        return defineValue(
-            this.routePaymentConfig?.price,
-            defineValue(
-                this.config.price,
-                "$1"
-            )
-        );
+        return defineValue(this.routePaymentConfig?.price, defineValue(this.config.price, "$1"));
     }
 
     private get description(): string {
-        return defineValue(this.routePaymentConfig?.description, "Monetized endpoint with x402 protocol.");
+        return defineValue(
+            this.routePaymentConfig?.description,
+            "Monetized endpoint with x402 protocol."
+        );
     }
 
     private get mimeType(): string {
@@ -77,10 +83,7 @@ export default class X402Builder {
     private get facilitator(): TFacilitator {
         return defineValue(
             this._facilitator,
-            defineValue(
-                this.config?.facilitator,
-                CoinbaseFacilitator
-            )
+            defineValue(this.config?.facilitator, CoinbaseFacilitator)
         );
     }
 
@@ -107,23 +110,25 @@ export default class X402Builder {
         }
 
         // 2. Single-network shorthand on the route config
-        if (isNotEmpty(this.routePaymentConfig?.network) && isNotEmpty(this.routePaymentConfig?.payTo)) {
-            return [{
-                scheme: this.scheme,
-                price: this.price,
-                network: this.routePaymentConfig!.network!,
-                payTo: this.routePaymentConfig!.payTo!,
-                description: this.description,
-                mimeType: this.mimeType
-            }];
+        if (
+            isNotEmpty(this.routePaymentConfig?.network) &&
+            isNotEmpty(this.routePaymentConfig?.payTo)
+        ) {
+            return [
+                {
+                    scheme: this.scheme,
+                    price: this.price,
+                    network: this.routePaymentConfig!.network!,
+                    payTo: this.routePaymentConfig!.payTo!,
+                    description: this.description,
+                    mimeType: this.mimeType
+                }
+            ];
         }
 
         // 3. Multi-network block in config file
         if (isNotEmpty(this.config.networks)) {
-            return this.config.networks!.map((entry: {
-                network: TNetwork;
-                payTo: string;
-            }) => ({
+            return this.config.networks!.map((entry: {network: TNetwork; payTo: string}) => ({
                 scheme: this.scheme,
                 price: this.price,
                 network: entry.network,
@@ -137,7 +142,12 @@ export default class X402Builder {
         const evmPayTo: string = "0xdABe8750061410D35cE52EB2a418c8cB004788B3";
         const svmPayTo: string = "GAnoyvy9p3QFyxikWDh9hA3fmSk2uiPLNWyQ579cckMn";
 
-        const evmNetworks: Array<TNetwork> = ["eip155:8453", "eip155:137", "eip155:42161", "eip155:480"];
+        const evmNetworks: Array<TNetwork> = [
+            "eip155:8453",
+            "eip155:137",
+            "eip155:42161",
+            "eip155:480"
+        ];
         const svmNetworks: Array<TNetwork> = ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"];
 
         return [
@@ -168,12 +178,17 @@ export default class X402Builder {
 
         // If another request is already initializing this same key, wait for it
         // prevents duplicate servers with different feePayers being built simultaneously
-        if (X402Builder._initPromises.has(cacheKey)) return X402Builder._initPromises.get(cacheKey)!;
+        if (X402Builder._initPromises.has(cacheKey))
+            return X402Builder._initPromises.get(cacheKey)!;
 
         const initPromise = (async (): Promise<x402HTTPResourceServer> => {
             try {
-                const facilitatorClient: HTTPFacilitatorClient = new HTTPFacilitatorClient(this.facilitator);
-                const resourceServer: x402ResourceServer = new x402ResourceServer(facilitatorClient);
+                const facilitatorClient: HTTPFacilitatorClient = new HTTPFacilitatorClient(
+                    this.facilitator
+                );
+                const resourceServer: x402ResourceServer = new x402ResourceServer(
+                    facilitatorClient
+                );
                 const registeredNetworks = new Set<string>();
 
                 for (const entry of this.accepts) {
@@ -197,7 +212,7 @@ export default class X402Builder {
 
                 const routes: RoutesConfig = {
                     [routeKey]: {
-                        accepts: this.accepts.map(entry => ({
+                        accepts: this.accepts.map((entry) => ({
                             scheme: entry.scheme,
                             payTo: entry.payTo,
                             price: entry.price,
@@ -208,7 +223,10 @@ export default class X402Builder {
                     }
                 };
 
-                const httpServer: x402HTTPResourceServer = new x402HTTPResourceServer(resourceServer, routes);
+                const httpServer: x402HTTPResourceServer = new x402HTTPResourceServer(
+                    resourceServer,
+                    routes
+                );
 
                 // initialize ONCE — this locks in the SVM feePayer
                 try {
@@ -216,7 +234,9 @@ export default class X402Builder {
                 } catch (error: any) {
                     const facilitatorError = getFacilitatorResponseError(error);
                     if (isNotEmpty(facilitatorError)) {
-                        throw new X402Exception((facilitatorError as FacilitatorResponseError).message);
+                        throw new X402Exception(
+                            (facilitatorError as FacilitatorResponseError).message
+                        );
                     }
                 }
 
@@ -261,7 +281,8 @@ export default class X402Builder {
      *   - Valid payment      -> verifies, calls handler(), settles, attaches PAYMENT-RESPONSE header
      */
     public async middleware(handler: () => Promise<Response>): Promise<Response> {
-        if (isEmpty(this.request)) throw new X402Exception("setRequest() must be called before middleware().");
+        if (isEmpty(this.request))
+            throw new X402Exception("setRequest() must be called before middleware().");
 
         const adapter: BunAdapter = new BunAdapter(this.request as Bun.BunRequest);
 
@@ -278,13 +299,17 @@ export default class X402Builder {
             )
         };
 
-        let result: HTTPProcessResult = {
-            type: "no-payment-required"
-        };
+        let result: HTTPProcessResult;
         try {
             result = await httpServer.processHTTPRequest(context);
         } catch (error: any) {
             throw new X402Exception(error.message);
+        }
+
+        if (isEmpty(result)) {
+            result = {
+                type: "no-payment-required"
+            };
         }
 
         const corsHeaders = {
@@ -310,7 +335,12 @@ export default class X402Builder {
             }
 
             case "payment-verified": {
-                const {cancellationDispatcher, paymentPayload, paymentRequirements, declaredExtensions} = result;
+                const {
+                    cancellationDispatcher,
+                    paymentPayload,
+                    paymentRequirements,
+                    declaredExtensions
+                } = result;
 
                 // Run handler, cancel on throw
                 let handlerResponse: Response;
@@ -366,7 +396,9 @@ export default class X402Builder {
 
                     // Merge settlement headers into response
                     const mergedHeaders = new Headers(handlerResponse.headers);
-                    Object.entries(settlement.headers).forEach(([k, v]) => mergedHeaders.set(k, v as string));
+                    Object.entries(settlement.headers).forEach(([k, v]) =>
+                        mergedHeaders.set(k, v as string)
+                    );
                     Object.entries(corsHeaders).forEach(([k, v]) => mergedHeaders.set(k, v));
                     mergedHeaders.set("Content-Type", this.mimeType);
 
@@ -377,15 +409,18 @@ export default class X402Builder {
                 } catch (error: any) {
                     const facilitatorError = getFacilitatorResponseError(error);
                     if (isNotEmpty(facilitatorError)) {
-                        return new Response(JSON.stringify({
-                            error: (facilitatorError as FacilitatorResponseError).message
-                        }), {
-                            headers: {
-                                "Content-Type": "application/json",
-                                ...corsHeaders
-                            },
-                            status: 502
-                        });
+                        return new Response(
+                            JSON.stringify({
+                                error: (facilitatorError as FacilitatorResponseError).message
+                            }),
+                            {
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    ...corsHeaders
+                                },
+                                status: 502
+                            }
+                        );
                     }
 
                     // Fallback: return 402 like Express does

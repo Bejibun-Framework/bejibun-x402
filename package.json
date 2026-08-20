@@ -1,6 +1,6 @@
 {
     "name": "@bejibun/x402",
-    "version": "0.2.1",
+    "version": "0.2.11",
     "author": "Havea Crenata <havea.crenata@gmail.com>",
     "repository": {
         "type": "git",
@@ -8,18 +8,16 @@
     },
     "main": "index.js",
     "module": "index.js",
-    "dependencies": {
-        "@bejibun/app": "^0.1.24",
-        "@bejibun/logger": "^0.1.22",
-        "@bejibun/utils": "^0.1.28",
-        "@coinbase/x402": "^2.1.0",
-        "@x402/core": "^2.20.0",
-        "@x402/evm": "^2.20.0",
-        "@x402/svm": "^2.20.0"
-    },
     "devDependencies": {
-        "@types/bun": "latest",
-        "tsc-alias": "^1.9.1"
+        "@eslint/js": "^10.0.1",
+        "@types/bun": "^1.3.14",
+        "eslint": "^10.8.1",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^17.11.0",
+        "prettier": "^3.9.6",
+        "tsc-alias": "^1.9.2",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.67.0"
     },
     "bugs": {
         "url": "https://github.com/Bejibun-Framework/bejibun-x402/issues"
@@ -35,13 +33,25 @@
     ],
     "license": "MIT",
     "scripts": {
-        "alias": "bunx tsc-alias -p tsconfig.json",
+        "alias": "tsc-alias -p tsconfig.json",
         "types": "cp -rf src/types dist",
         "rsync": "rsync -a dist/ ./",
         "clean": "rm -rf dist",
-        "build": "bunx tsc -p tsconfig.json && bun run types && bun run alias && bun run rsync && bun run clean",
+        "format": "prettier --write src --log-level=silent",
+        "eslint": "eslint src",
+        "lint": "bun run format && bun run eslint",
+        "build": "bun run lint && tsc -p tsconfig.json && bun run types && bun run alias && bun run rsync && bun run clean",
         "deploy": "bun run build && bun publish --access public"
     },
     "type": "module",
-    "types": "index.d.ts"
+    "types": "index.d.ts",
+    "dependencies": {
+        "@bejibun/app": "^0.1.25",
+        "@bejibun/logger": "^0.1.23",
+        "@bejibun/utils": "^0.1.29",
+        "@coinbase/x402": "^2.1.0",
+        "@x402/core": "^2.23.0",
+        "@x402/evm": "^2.23.0",
+        "@x402/svm": "^2.23.0"
+    }
 }
